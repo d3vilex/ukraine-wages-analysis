@@ -1,132 +1,169 @@
 import os
+import textwrap
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import seaborn as sns
 
-# Налаштування шляхів та стилів графіків
+# Налаштування шляхів
 PROCESSED_FILE_PATH = os.path.join("data_processed", "wages_cleaned.csv")
 REPORTS_DIR = "reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
-sns.set_theme(style="whitegrid", palette="muted")
-plt.rcParams.update({'font.sans-serif': 'DejaVu Sans', 'font.size': 10})
+# Загальна стилізація графіків
+plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
+plt.rcParams['font.family'] = 'DejaVu Sans'
+
 
 def load_data():
+    """Завантажує очищений датасет та приводить дати до формату datetime."""
     df = pd.read_csv(PROCESSED_FILE_PATH)
     df['date'] = pd.to_datetime(df['date'])
     return df
 
+
+def wrap_labels(labels, max_chars=35):
+    """Переносить довгі назви галузей на кілька рядків для компактності."""
+    return ['\n'.join(textwrap.wrap(label, max_chars)) for label in labels]
+
+
 def analyze_industries(df):
+    """Галузевий аналіз: ТОП-5 лідерів та аутсайдерів із подвійним сабплотом."""
     print("==================================================")
     print("1. ГАЛУЗЕВИЙ АНАЛІЗ (ПО ВСІЙ УКРАЇНІ)")
     print("==================================================")
-    
-    # Фільтруємо лише загальнонаціональні дані по галузях (виключаємо підсумковий рядок 'Усього')
+
     df_ind = df[(df['region'] == 'Україна') & (df['industry'] != 'Усього')].copy()
-    
-    # Знаходимо останній повний рік у датасеті
     latest_year = df_ind['year'].max()
     df_latest = df_ind[df_ind['year'] == latest_year]
-    
-    # Середня зарплата за останній рік за галузями
+
     avg_by_ind = (
         df_latest.groupby('industry')['salary_uah']
         .mean()
         .reset_index()
         .sort_values(by='salary_uah', ascending=False)
     )
-    
-    top_5 = avg_by_ind.head(5)
-    bottom_5 = avg_by_ind.tail(5)
-    
+
+    top_5 = avg_by_ind.head(5).copy()
+    bottom_5 = avg_by_ind.tail(5).copy().sort_values(by='salary_uah', ascending=True)
+
     print(f"\nТОП-5 галузей за середньою зарплатою у {latest_year} році (грн):")
     for idx, row in top_5.iterrows():
         print(f"  * {row['industry']}: {row['salary_uah']:,.2f} грн")
-        
+
     print(f"\nТОП-5 аутсайдерів за середньою зарплатою у {latest_year} році (грн):")
-    for idx, row in bottom_5.iterrows():
+    for idx, row in bottom_5.sort_values(by='salary_uah', ascending=False).iterrows():
         print(f"  * {row['industry']}: {row['salary_uah']:,.2f} грн")
-        
-    # Співвідношення розриву
-    gap_ratio = top_5.iloc[0]['salary_uah'] / bottom_5.iloc[-1]['salary_uah']
+
+    gap_ratio = top_5.iloc[0]['salary_uah'] / bottom_5.iloc[0]['salary_uah']
     print(f"\nРозрив між абсолютним лідером і аутсайдером: у {gap_ratio:.2f} раза")
 
-    # Візуалізація рейтингу
-    plt.figure(figsize=(12, 8))
-    chart_data = pd.concat([top_5, bottom_5])
-    palette = ['#2ecc71' if i < 5 else '#e74c3c' for i in range(len(chart_data))]
-    
-    ax = sns.barplot(
-        data=chart_data,
-        x='salary_uah',
-        y='industry',
-        palette=palette
-    )
-    plt.title(f"ТОП-5 найбільш та найменш оплачуваних галузей України ({latest_year})", fontsize=14, pad=15)
-    plt.xlabel("Середня заробітна плата (грн)", fontsize=11)
-    plt.ylabel("Галузь (КВЕД)", fontsize=11)
-    
-    for p in ax.patches:
-        width = p.get_width()
-        ax.annotate(f"{width:,.0f} грн", (width + 500, p.get_y() + p.get_height() / 2.),
-                    va='center', fontsize=9)
-        
+    # Побудова двох паралельних графіків
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharex=False)
+    fig.suptitle(f"Рейтинг галузей України за середньою заробітною платою ({latest_year})", 
+                 fontsize=14, fontweight='bold', y=0.98)
+
+    # 1. Лідери
+    bars1 = ax1.barh(wrap_labels(top_5['industry']), top_5['salary_uah'], color='#10b981', height=0.55)
+    ax1.set_title("ТОП-5 Галузей-лідерів", fontsize=12, fontweight='bold', pad=12)
+    ax1.invert_yaxis()
+    ax1.set_xlabel("Заробітна плата (грн)", fontsize=10)
+    ax1.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax1.grid(axis='y', linestyle='')
+    ax1.spines[['top', 'right']].set_visible(False)
+
+    for bar in bars1:
+        w = bar.get_width()
+        ax1.annotate(f"{w:,.0f} грн",
+                     xy=(w, bar.get_y() + bar.get_height() / 2),
+                     xytext=(6, 0), textcoords="offset points",
+                     va='center', fontsize=9, fontweight='bold', color='#065f46')
+
+    # 2. Аутсайдери
+    bars2 = ax2.barh(wrap_labels(bottom_5['industry']), bottom_5['salary_uah'], color='#ef4444', height=0.55)
+    ax2.set_title("ТОП-5 Найменш оплачуваних галузей", fontsize=12, fontweight='bold', pad=12)
+    ax2.set_xlabel("Заробітна плата (грн)", fontsize=10)
+    ax2.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax2.grid(axis='y', linestyle='')
+    ax2.spines[['top', 'right']].set_visible(False)
+
+    for bar in bars2:
+        w = bar.get_width()
+        ax2.annotate(f"{w:,.0f} грн",
+                     xy=(w, bar.get_y() + bar.get_height() / 2),
+                     xytext=(6, 0), textcoords="offset points",
+                     va='center', fontsize=9, fontweight='bold', color='#991b1b')
+
     plt.tight_layout()
-    plt.savefig(os.path.join(REPORTS_DIR, "top_bottom_industries.png"), dpi=300)
+    plt.savefig(os.path.join(REPORTS_DIR, "top_bottom_industries.png"), dpi=300, bbox_inches='tight')
     plt.close()
-    print(f" Графік збережено: {REPORTS_DIR}/top_bottom_industries.png")
+    print(f" Графік галузей оновлено: {REPORTS_DIR}/top_bottom_industries.png")
 
 
 def analyze_regions(df):
+    """Регіональний аналіз: розрахунок відхилень від бенчмарку та візуалізація."""
     print("\n==================================================")
     print("2. РЕГІОНАЛЬНИЙ АНАЛІЗ")
     print("==================================================")
-    
-    # Фільтруємо агреговані зарплати по регіонах
+
     df_reg = df[df['industry'] == 'Усього'].copy()
     latest_year = df_reg['year'].max()
     df_reg_latest = df_reg[df_reg['year'] == latest_year]
-    
+
     avg_by_reg = (
         df_reg_latest.groupby('region')['salary_uah']
         .mean()
         .reset_index()
-        .sort_values(by='salary_uah', ascending=False)
+        .sort_values(by='salary_uah', ascending=True)
     )
-    
-    # Знаходимо середнє по Україні як бенчмарк
+
     ukraine_benchmark = avg_by_reg[avg_by_reg['region'] == 'Україна']['salary_uah'].values[0]
+    avg_by_reg = avg_by_reg[avg_by_reg['region'] != 'Україна'].copy()
     avg_by_reg['diff_pct'] = ((avg_by_reg['salary_uah'] - ukraine_benchmark) / ukraine_benchmark) * 100
-    
+
     print(f"\nБенчмарк по Україні ({latest_year} рік): {ukraine_benchmark:,.2f} грн")
     print("\nВідхилення зарплат у регіонах від середнього рівня по країні:")
-    for idx, row in avg_by_reg.iterrows():
-        if row['region'] != 'Україна':
-            sign = "+" if row['diff_pct'] > 0 else ""
-            print(f"  * {row['region']}: {row['salary_uah']:,.2f} грн ({sign}{row['diff_pct']:.1f}%)")
-            
-    # Візуалізація регіонів
-    plt.figure(figsize=(10, 6))
-    reg_plot_data = avg_by_reg[avg_by_reg['region'] != 'Україна']
-    colors = ['#3498db' if x > 0 else '#95a5a6' for x in reg_plot_data['diff_pct']]
-    
-    sns.barplot(data=reg_plot_data, x='diff_pct', y='region', palette=colors)
-    plt.axvline(0, color='red', linestyle='--', linewidth=1.5, label='Середній рівень по Україні')
-    plt.title(f"Відхилення заробітної плати регіонів від середнього по Україні ({latest_year})", fontsize=13, pad=15)
+    for idx, row in avg_by_reg.sort_values(by='salary_uah', ascending=False).iterrows():
+        sign = "+" if row['diff_pct'] > 0 else ""
+        print(f"  * {row['region']}: {row['salary_uah']:,.2f} грн ({sign}{row['diff_pct']:.1f}%)")
+
+    # Побудова графіка регіональних відхилень
+    plt.figure(figsize=(11, 7))
+    colors = ['#2563eb' if x > 0 else '#64748b' for x in avg_by_reg['diff_pct']]
+
+    bars = plt.barh(avg_by_reg['region'], avg_by_reg['diff_pct'], color=colors, height=0.6)
+    plt.axvline(0, color='#dc2626', linestyle='--', linewidth=1.5, label='Середній рівень по Україні (0%)')
+
+    plt.title(f"Відхилення заробітної плати регіонів від середнього показника по Україні ({latest_year})", 
+              fontsize=13, fontweight='bold', pad=15)
     plt.xlabel("Відхилення від середнього рівня (%)", fontsize=10)
-    plt.ylabel("Регіон", fontsize=10)
-    plt.legend()
+    plt.gca().xaxis.set_major_formatter(ticker.PercentFormatter())
+    plt.grid(axis='y', linestyle='')
+    plt.gca().spines[['top', 'right']].set_visible(False)
+    plt.legend(frameon=True, loc='lower right')
+
+    for bar in bars:
+        w = bar.get_width()
+        text_sign = f"+{w:.1f}%" if w > 0 else f"{w:.1f}%"
+        x_offset = 6 if w >= 0 else -6
+        ha_align = 'left' if w >= 0 else 'right'
+        plt.annotate(text_sign,
+                     xy=(w, bar.get_y() + bar.get_height() / 2),
+                     xytext=(x_offset, 0), textcoords="offset points",
+                     va='center', ha=ha_align, fontsize=9, fontweight='bold')
+
     plt.tight_layout()
-    plt.savefig(os.path.join(REPORTS_DIR, "regional_comparison.png"), dpi=300)
+    plt.savefig(os.path.join(REPORTS_DIR, "regional_comparison.png"), dpi=300, bbox_inches='tight')
     plt.close()
-    print(f" Графік збережено: {REPORTS_DIR}/regional_comparison.png")
+    print(f" Графік регіонів оновлено: {REPORTS_DIR}/regional_comparison.png")
 
 
 def calculate_descriptive_stats(df):
+    """Розрахунок описової статистики та індикаторів нерівності."""
     print("\n==================================================")
     print("3. ОПИСОВА СТАТИСТИКА ТА НЕРІВНІСТЬ ДОХОДІВ")
     print("==================================================")
-    
+
     salaries = df[df['industry'] != 'Усього']['salary_uah']
     mean_val = salaries.mean()
     median_val = salaries.median()
@@ -135,7 +172,7 @@ def calculate_descriptive_stats(df):
     q25 = salaries.quantile(0.25)
     q75 = salaries.quantile(0.75)
     iqr_val = q75 - q25
-    
+
     print(f"Середнє арифметичне: {mean_val:,.2f} грн")
     print(f"Медіана:              {median_val:,.2f} грн")
     print(f"Стандартне відхилення:{std_val:,.2f} грн")
