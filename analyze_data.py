@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import seaborn as sns
 
-# Налаштування шляхів
+# Налаштування шляхів до файлів та папок
 PROCESSED_FILE_PATH = os.path.join("data_processed", "wages_cleaned.csv")
 REPORTS_DIR = "reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -22,8 +22,8 @@ def load_data():
     return df
 
 
-def wrap_labels(labels, max_chars=35):
-    """Переносить довгі назви галузей на кілька рядків для компактності."""
+def wrap_labels(labels, max_chars=32):
+    """Переносить довгі назви галузей на кілька рядків."""
     return ['\n'.join(textwrap.wrap(label, max_chars)) for label in labels]
 
 
@@ -58,17 +58,19 @@ def analyze_industries(df):
     gap_ratio = top_5.iloc[0]['salary_uah'] / bottom_5.iloc[0]['salary_uah']
     print(f"\nРозрив між абсолютним лідером і аутсайдером: у {gap_ratio:.2f} раза")
 
-    # Побудова двох паралельних графіків
+    # Створюємо фігуру з двома графіками поруч
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharex=False)
     fig.suptitle(f"Рейтинг галузей України за середньою заробітною платою ({latest_year})", 
                  fontsize=14, fontweight='bold', y=0.98)
 
-    # 1. Лідери
+    # 1. ТОП-5 Лідерів
     bars1 = ax1.barh(wrap_labels(top_5['industry']), top_5['salary_uah'], color='#10b981', height=0.55)
     ax1.set_title("ТОП-5 Галузей-лідерів", fontsize=12, fontweight='bold', pad=12)
     ax1.invert_yaxis()
     ax1.set_xlabel("Заробітна плата (грн)", fontsize=10)
+    ax1.xaxis.set_major_locator(ticker.MultipleLocator(20000))
     ax1.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax1.set_xlim(0, top_5['salary_uah'].max() * 1.25)
     ax1.grid(axis='y', linestyle='')
     ax1.spines[['top', 'right']].set_visible(False)
 
@@ -79,11 +81,13 @@ def analyze_industries(df):
                      xytext=(6, 0), textcoords="offset points",
                      va='center', fontsize=9, fontweight='bold', color='#065f46')
 
-    # 2. Аутсайдери
+    # 2. ТОП-5 Аутсайдерів
     bars2 = ax2.barh(wrap_labels(bottom_5['industry']), bottom_5['salary_uah'], color='#ef4444', height=0.55)
     ax2.set_title("ТОП-5 Найменш оплачуваних галузей", fontsize=12, fontweight='bold', pad=12)
     ax2.set_xlabel("Заробітна плата (грн)", fontsize=10)
+    ax2.xaxis.set_major_locator(ticker.MultipleLocator(5000))
     ax2.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax2.set_xlim(0, bottom_5['salary_uah'].max() * 1.3)
     ax2.grid(axis='y', linestyle='')
     ax2.spines[['top', 'right']].set_visible(False)
 
