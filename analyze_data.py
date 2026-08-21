@@ -58,7 +58,6 @@ def analyze_industries(df):
     gap_ratio = top_5.iloc[0]['salary_uah'] / bottom_5.iloc[0]['salary_uah']
     print(f"\nРозрив між абсолютним лідером і аутсайдером: у {gap_ratio:.2f} раза")
 
-    # Створюємо фігуру з двома графіками поруч
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharex=False)
     fig.suptitle(f"Рейтинг галузей України за середньою заробітною платою ({latest_year})", 
                  fontsize=14, fontweight='bold', y=0.98)
@@ -104,10 +103,62 @@ def analyze_industries(df):
     print(f" Графік галузей оновлено: {REPORTS_DIR}/top_bottom_industries.png")
 
 
+def analyze_wage_gap_dynamics(df):
+    """Аналіз динаміки розриву між ТОП-галуззю, аутсайдером та середнім рівнем."""
+    print("\n==================================================")
+    print("2. АНАЛІЗ ДИНАМІКИ ГАЛУЗЕВОГО РОЗРИВУ (2021–2026)")
+    print("==================================================")
+
+    # Вибираємо лідера (IT), аутсайдера (Культура/Бібліотеки) та середнє (Усього) по Україні
+    df_ukr = df[df['region'] == 'Україна'].copy()
+
+    # Шукаємо точні назви категорій
+    it_label = [i for i in df_ukr['industry'].unique() if 'Інформація' in i or 'телекомунікації' in i][0]
+    culture_label = [i for i in df_ukr['industry'].unique() if 'бібліотек' in i or 'культури' in i or 'Мистецтво' in i][0]
+    total_label = 'Усього'
+
+    df_gap = df_ukr[df_ukr['industry'].isin([it_label, culture_label, total_label])].copy()
+    pivot_gap = df_gap.pivot(index='date', columns='industry', values='salary_uah').dropna()
+
+    first_gap = pivot_gap[it_label].iloc[0] / pivot_gap[culture_label].iloc[0]
+    last_gap = pivot_gap[it_label].iloc[-1] / pivot_gap[culture_label].iloc[-1]
+    print(f"Розрив (IT vs Культура) на початку періоду: у {first_gap:.2f} раза")
+    print(f"Розрив (IT vs Культура) наприкінці періоду:  у {last_gap:.2f} раза")
+
+    # Візуалізація графіка розриву
+    plt.figure(figsize=(12, 6))
+
+    # Лінії
+    plt.plot(pivot_gap.index, pivot_gap[it_label], label='Лідер: Інформація та телекомунікації', 
+             color='#10b981', linewidth=2.5)
+    plt.plot(pivot_gap.index, pivot_gap[total_label], label='Середнє по Україні (Усього)', 
+             color='#2563eb', linewidth=2, linestyle='--')
+    plt.plot(pivot_gap.index, pivot_gap[culture_label], label='Аутсайдер: Бібліотеки, архіви, заклади культури', 
+             color='#ef4444', linewidth=2.5)
+
+    # Зафарбована зона розриву між лідером та аутсайдером
+    plt.fill_between(pivot_gap.index, pivot_gap[culture_label], pivot_gap[it_label], 
+                     color='#f87171', alpha=0.15, label=f'Галузевий розрив ({last_gap:.1f}x)')
+
+    plt.title("Динаміка розриву заробітних плат: Технологічний сектор vs Заклади культури (2021–2026)", 
+              fontsize=13, fontweight='bold', pad=15)
+    plt.xlabel("Період", fontsize=10)
+    plt.ylabel("Середньомісячна заробітна плата (грн)", fontsize=10)
+    plt.gca().yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    plt.grid(True, linestyle=':', alpha=0.6)
+    plt.gca().spines[['top', 'right']].set_visible(False)
+    plt.legend(frameon=True, loc='upper left')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(REPORTS_DIR, "wage_gap_dynamics.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f" Графік динаміки розриву збережено: {REPORTS_DIR}/wage_gap_dynamics.png")
+
+
 def analyze_regions(df):
     """Регіональний аналіз: розрахунок відхилень від бенчмарку та візуалізація."""
     print("\n==================================================")
-    print("2. РЕГІОНАЛЬНИЙ АНАЛІЗ")
+    print("3. РЕГІОНАЛЬНИЙ АНАЛІЗ")
     print("==================================================")
 
     df_reg = df[df['industry'] == 'Усього'].copy()
@@ -131,7 +182,6 @@ def analyze_regions(df):
         sign = "+" if row['diff_pct'] > 0 else ""
         print(f"  * {row['region']}: {row['salary_uah']:,.2f} грн ({sign}{row['diff_pct']:.1f}%)")
 
-    # Побудова графіка регіональних відхилень
     plt.figure(figsize=(11, 7))
     colors = ['#2563eb' if x > 0 else '#64748b' for x in avg_by_reg['diff_pct']]
 
@@ -165,7 +215,7 @@ def analyze_regions(df):
 def calculate_descriptive_stats(df):
     """Розрахунок описової статистики та індикаторів нерівності."""
     print("\n==================================================")
-    print("3. ОПИСОВА СТАТИСТИКА ТА НЕРІВНІСТЬ ДОХОДІВ")
+    print("4. ОПИСОВА СТАТИСТИКА ТА НЕРІВНІСТЬ ДОХОДІВ")
     print("==================================================")
 
     salaries = df[df['industry'] != 'Усього']['salary_uah']
@@ -189,5 +239,6 @@ def calculate_descriptive_stats(df):
 if __name__ == "__main__":
     df_clean = load_data()
     analyze_industries(df_clean)
+    analyze_wage_gap_dynamics(df_clean)
     analyze_regions(df_clean)
     calculate_descriptive_stats(df_clean)
