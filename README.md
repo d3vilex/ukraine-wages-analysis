@@ -66,4 +66,6 @@
 
 ---
 
-*Технічна документація щодо етапів очищення даних, структури пайплайну та формул розрахунку доступна у файлі [technical_report.md](technical_report.md).*
+## Додаткові матеріали
+* 🌐 **Tableau Public Dashboard:** [Переглянути онлайн](https://public.tableau.com/app/profile/alex.pikul/viz/karazin/Dashboard1?publish=yes)
+* 📑 **Технічна документація (ETL & Stats):** [technical_report.md](technical_report.md)
